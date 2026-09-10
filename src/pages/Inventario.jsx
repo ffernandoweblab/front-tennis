@@ -78,7 +78,7 @@ function Inventario() {
         </div>
         <div className="border border-border rounded-sm bg-surface px-5 py-4">
           <p className="text-muted text-sm">Disponibles</p>
-          <p className="font-display text-2xl mt-1 text-text">{productos.length}</p>
+          <p className="font-display text-2xl mt-1 text-text">{disponibles}</p>
         </div>
         <div className="border border-border rounded-sm bg-surface px-5 py-4">
           <p className="text-muted text-sm">Valor en inventario</p>

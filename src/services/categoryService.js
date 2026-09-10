@@ -9,3 +9,5 @@ export const crearCategoria = async (categoria) => {
   const response = await api.post("/category", categoria);
   return response.data;
 };
+
+

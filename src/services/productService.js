@@ -5,8 +5,15 @@ export const getProductos = async () => {
   return response.data;
 };
 
-export const crearProducto = async (producto) => {
-  const response = await api.post("/products", producto);
+export const getProductosPorLote = async (loteId) => {
+  const productos = await getProductos();
+  return productos.filter((producto) => producto.lote === loteId || producto.lote?._id === loteId);
+};
+
+export const crearProducto = async (formData) => {
+  const response = await api.post("/products", formData, {
+    headers: { "Content-Type": "multipart/form-data" },
+  });
   return response.data;
 };
 
