@@ -500,22 +500,20 @@ function Reportes() {
               <button
                 type="button"
                 onClick={() => setVistaLotes("grafica")}
-                className={`px-2.5 py-1 rounded-sm transition-colors ${
-                  vistaLotes === "grafica"
+                className={`px-2.5 py-1 rounded-sm transition-colors ${vistaLotes === "grafica"
                     ? "bg-accent text-bg font-medium"
                     : "text-muted hover:text-text"
-                }`}
+                  }`}
               >
                 Grafica
               </button>
               <button
                 type="button"
                 onClick={() => setVistaLotes("lista")}
-                className={`px-2.5 py-1 rounded-sm transition-colors ${
-                  vistaLotes === "lista"
+                className={`px-2.5 py-1 rounded-sm transition-colors ${vistaLotes === "lista"
                     ? "bg-accent text-bg font-medium"
                     : "text-muted hover:text-text"
-                }`}
+                  }`}
               >
                 Barras de lista
               </button>
@@ -720,41 +718,41 @@ function Reportes() {
             ) : (
               topCategorias.map((item, index) => {
                 const porcentaje = Math.round((item.ingreso / maxIngresoCategoria) * 100);
-               return (
-  <div key={item.nombre} className="space-y-1.5">
-    <div className="flex items-center justify-between gap-2 sm:gap-3">
-      <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
-        <span className="text-xs font-bold text-muted w-4 shrink-0">
-          #{index + 1}
-        </span>
-        <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-sm border border-border flex items-center justify-center text-accent shrink-0 bg-background/50">
-          <Tag size={14} className="sm:hidden" />
-          <Tag size={16} className="hidden sm:block" />
-        </div>
-        <div className="min-w-0 flex-1">
-          <p className="text-sm font-medium text-text truncate" title={item.nombre}>
-            {item.nombre}
-          </p>
-          <p className="text-[11px] sm:text-xs text-muted truncate">
-            {item.vendidos} {item.vendidos === 1 ? "par vendido" : "pares vendidos"} • {item.totalProductos} {item.totalProductos === 1 ? "modelo" : "modelos"}
-          </p>
-        </div>
-      </div>
-      <div className="text-right shrink-0">
-        <span className="text-xs sm:text-sm font-semibold text-accent whitespace-nowrap">
-          ${item.ingreso.toLocaleString()}
-        </span>
-      </div>
-    </div>
-    {/* Barra visual de recaudación */}
-    <div className="w-full bg-background/60 h-1.5 rounded-full overflow-hidden ml-6 sm:ml-7">
-      <div
-        className="bg-accent h-full rounded-full transition-all duration-500"
-        style={{ width: `${Math.max(porcentaje, 4)}%` }}
-      />
-    </div>
-  </div>
-);
+                return (
+                  <div key={item.nombre} className="space-y-1.5">
+                    <div className="flex items-center justify-between gap-2 sm:gap-3">
+                      <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
+                        <span className="text-xs font-bold text-muted w-4 shrink-0">
+                          #{index + 1}
+                        </span>
+                        <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-sm border border-border flex items-center justify-center text-accent shrink-0 bg-background/50">
+                          <Tag size={14} className="sm:hidden" />
+                          <Tag size={16} className="hidden sm:block" />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-medium text-text truncate" title={item.nombre}>
+                            {item.nombre}
+                          </p>
+                          <p className="text-[11px] sm:text-xs text-muted truncate">
+                            {item.vendidos} {item.vendidos === 1 ? "par vendido" : "pares vendidos"} • {item.totalProductos} {item.totalProductos === 1 ? "modelo" : "modelos"}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="text-right shrink-0">
+                        <span className="text-xs sm:text-sm font-semibold text-accent whitespace-nowrap">
+                          ${item.ingreso.toLocaleString()}
+                        </span>
+                      </div>
+                    </div>
+                    {/* Barra visual de recaudación */}
+                    <div className="w-full bg-background/60 h-1.5 rounded-full overflow-hidden ml-6 sm:ml-7">
+                      <div
+                        className="bg-accent h-full rounded-full transition-all duration-500"
+                        style={{ width: `${Math.max(porcentaje, 4)}%` }}
+                      />
+                    </div>
+                  </div>
+                );
               })
             )}
           </div>
