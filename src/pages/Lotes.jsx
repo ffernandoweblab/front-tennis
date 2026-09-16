@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import DashboardLayout from "../layouts/DashboardLayout";
 import { getLotes, crearLote } from "../services/lotService";
 
+
 function calcularInversion(desglose) {
   if (!desglose) return 0;
   const { mercancia = 0, viaticos = 0, gasolina = 0, otros = 0 } = desglose;
@@ -187,8 +188,8 @@ function Lotes() {
                 <td className="px-5 py-4 text-right">
                   <span
                     className={`text-xs px-2 py-1 rounded-sm border ${lote.estado === "activo"
-                        ? "text-positive border-positive"
-                        : "text-muted border-border"
+                      ? "text-positive border-positive"
+                      : "text-muted border-border"
                       }`}
                   >
                     {lote.estado}

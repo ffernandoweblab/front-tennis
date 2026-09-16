@@ -7,6 +7,8 @@ import LoteDetalle from "./pages/LoteDetalle";
 import Inventario from "./pages/Inventario";
 import Ventas from "./pages/Ventas";
 import Reportes from "./pages/Reportes";
+import NuevoProducto from "./pages/NuevoProducto";
+import EditarProducto from "./pages/EditarProducto";
 
 function App() {
   return (
@@ -17,6 +19,8 @@ function App() {
         <Route path="/lotes" element={<Lotes />} />
         <Route path="/lotes/:id" element={<LoteDetalle />} />
         <Route path="/inventario" element={<Inventario />} />
+        <Route path="/inventario/newProduct" element={<NuevoProducto />} />
+        <Route path="/inventario/editar/:id" element={<EditarProducto />} />
         <Route path="/ventas" element={<Ventas />} />
         <Route path="/reportes" element={<Reportes />} />
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
