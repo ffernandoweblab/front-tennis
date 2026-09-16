@@ -4,6 +4,7 @@ const links = [
   { to: "/dashboard", label: "Inicio" },
   { to: "/lotes", label: "Lotes" },
   { to: "/inventario", label: "Inventario" },
+  { to: "/categorias", label: "Categorias" },
   { to: "/ventas", label: "Ventas" },
   { to: "/reportes", label: "Reportes" },
 ];

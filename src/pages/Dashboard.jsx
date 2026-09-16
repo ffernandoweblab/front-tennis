@@ -15,8 +15,8 @@ function calcularInversion(desglose) {
 }
 
 function derivarEstado(item) {
-  if (!item.activo) return "Apartado";
-  if (Number(item.stock) <= 0) return "Vendido";
+  if (item.activo === false || item.activo === "false") return "Agotado";
+  if (Number(item.stock) <= 0) return "Agotado";
   return "Disponible";
 }
 
@@ -67,7 +67,8 @@ function Dashboard() {
     let disponiblesCount = 0;
 
     for (const item of productos) {
-      const stock = Number(item.stock || 0);
+      const estaInactivo = item.activo === false || item.activo === "false";
+      const stock = estaInactivo ? 0 : Number(item.stock || 0);
       const costo = Number(item.costo || 0);
       const venta = Number(item.precioMercado || 0);
 
@@ -331,7 +332,7 @@ function Dashboard() {
                       ${Number(prod.precioMercado || 0).toLocaleString()}
                     </p>
                     <span className="text-[11px] text-muted">
-                      Stock: {prod.stock ?? 0}
+                      Stock: {prod.activo === false || prod.activo === "false" ? 0 : (prod.stock ?? 0)}
                     </span>
                   </div>
                 </div>

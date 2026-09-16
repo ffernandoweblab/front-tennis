@@ -9,6 +9,7 @@ import Ventas from "./pages/Ventas";
 import Reportes from "./pages/Reportes";
 import NuevoProducto from "./pages/NuevoProducto";
 import EditarProducto from "./pages/EditarProducto";
+import Categorias from "./pages/Categorias";
 
 function App() {
   return (
@@ -18,6 +19,7 @@ function App() {
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/lotes" element={<Lotes />} />
         <Route path="/lotes/:id" element={<LoteDetalle />} />
+        <Route path="/categorias" element={<Categorias />} />
         <Route path="/inventario" element={<Inventario />} />
         <Route path="/inventario/newProduct" element={<NuevoProducto />} />
         <Route path="/inventario/editar/:id" element={<EditarProducto />} />

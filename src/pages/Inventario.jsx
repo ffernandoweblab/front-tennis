@@ -11,13 +11,14 @@ import Button from "../components/ui/Button";
 
 const estadoColor = {
   Disponible: "text-positive border-positive",
+  Agotado: "text-negative border-negative",
   Vendido: "text-muted border-border",
   Apartado: "text-accent border-accent",
 };
 
 function derivarEstado(item) {
-  if (!item.activo) return "Apartado";
-  if (Number(item.stock) <= 0) return "Vendido";
+  if (item.activo === false || item.activo === "false") return "Agotado";
+  if (Number(item.stock) <= 0) return "Agotado";
   return "Disponible";
 }
 
@@ -25,6 +26,8 @@ function derivarEstado(item) {
 
 function FilaProducto({ item, onEditar, onEliminar }) {
   const perdida = Number(item.precioMercado) < Number(item.costo);
+  const estaAgotado = item.activo === false || item.activo === "false" || Number(item.stock) <= 0;
+  const stockVisible = estaAgotado ? 0 : Number(item.stock ?? 0);
 
   return (
     <tr
@@ -61,7 +64,11 @@ function FilaProducto({ item, onEditar, onEliminar }) {
         </div>
       </td>
       <td className="px-5 py-4 text-muted">{item.lote?.numLot ?? "--"}</td>
-      <td className="px-5 py-4 text-right text-text font-medium">{item.stock ?? 0}</td>
+      <td className="px-5 py-4 text-right">
+        <span className={`font-medium ${estaAgotado ? "text-negative" : "text-text"}`}>
+          {stockVisible}
+        </span>
+      </td>
       <td className="px-5 py-4 text-right text-muted">
         ${Number(item.costo || 0).toLocaleString()}
       </td>
@@ -98,6 +105,7 @@ function PanelFiltros({ filtroEstado, setFiltroEstado, filtroCategoria, setFiltr
   const opcionesEstado = [
     { value: "Todos", label: "Todos" },
     { value: "Disponible", label: "Disponible" },
+    { value: "Agotado", label: "Agotado" },
     { value: "Apartado", label: "Apartado" },
     { value: "Vendido", label: "Vendido" },
   ];
@@ -235,8 +243,11 @@ function Inventario() {
     let gananciaPotencial = 0;
 
     for (const item of productos) {
-      if (item.estado === "Disponible") disponibles++;
-      if (item.estado !== "Vendido") {
+      const estaAgotado = item.activo === false || item.activo === "false" || item.estado === "Agotado" || item.estado === "Vendido" || Number(item.stock || 0) <= 0;
+      if (item.estado === "Disponible" && !estaAgotado) {
+        disponibles++;
+      }
+      if (!estaAgotado) {
         const costo = Number(item.costo || 0);
         const venta = Number(item.precioMercado || 0);
         const stock = Number(item.stock || 0);
@@ -254,17 +265,22 @@ function Inventario() {
   const irAEditar = (id) => navigate(`/inventario/editar/${id}`);
 
   const exportarCSV = useCallback(() => {
-    const encabezados = ["Nombre", "Marca", "Talla", "Lote", "Costo", "Venta", "Margen", "Estado"];
-    const filas = filtrado.map((item) => [
-      item.nombre,
-      item.marca || "",
-      item.talla || "",
-      item.lote?.numLot ?? "",
-      item.costo || 0,
-      item.precioMercado || 0,
-      (Number(item.precioMercado || 0) - Number(item.costo || 0)).toFixed(2),
-      item.estado,
-    ]);
+    const encabezados = ["Nombre", "Marca", "Talla", "Lote", "Stock", "Costo", "Venta", "Margen", "Estado"];
+    const filas = filtrado.map((item) => {
+      const estaAgotado = item.activo === false || item.activo === "false" || Number(item.stock || 0) <= 0;
+      const stockVisible = estaAgotado ? 0 : Number(item.stock || 0);
+      return [
+        item.nombre,
+        item.marca || "",
+        item.talla || "",
+        item.lote?.numLot ?? "",
+        stockVisible,
+        item.costo || 0,
+        item.precioMercado || 0,
+        (Number(item.precioMercado || 0) - Number(item.costo || 0)).toFixed(2),
+        item.estado,
+      ];
+    });
 
     const csv = [encabezados, ...filas]
       .map((fila) => fila.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(","))
