@@ -48,10 +48,12 @@ function Ventas() {
     nombre: "",
     telefono: "",
   });
-  const [tipoPago, setTipoPago] = useState("Contado"); // "Contado" | "Abonos"
+  const [tipoPago, setTipoPago] = useState("Contado"); // "Contado" | "Apartado"
   const [medioPago, setMedioPago] = useState("Efectivo"); // "Efectivo" | "Transferencia"
   const [montoRecibido, setMontoRecibido] = useState("");
   const [anticipoAbono, setAnticipoAbono] = useState("");
+  const [diasApartado, setDiasApartado] = useState("15");
+  const [fechaLimitePersonalizada, setFechaLimitePersonalizada] = useState("");
   const [folioTransferencia, setFolioTransferencia] = useState("");
 
   // Modal para abonar
@@ -177,12 +179,23 @@ function Ventas() {
     return recibido - totalCarrito;
   }, [montoRecibido, totalCarrito, tipoPago, medioPago]);
 
-  // Saldo pendiente si es abono
+  // Saldo pendiente si es apartado o abono
   const saldoPendienteCalculado = useMemo(() => {
-    if (tipoPago !== "Abonos") return 0;
+    if (tipoPago !== "Apartado" && tipoPago !== "Abonos") return 0;
     const anticipo = Number(anticipoAbono || 0);
     return Math.max(0, totalCarrito - anticipo);
   }, [tipoPago, anticipoAbono, totalCarrito]);
+
+  // Fecha calculada de vencimiento del apartado
+  const fechaVencimientoApartado = useMemo(() => {
+    if (tipoPago !== "Apartado" && tipoPago !== "Abonos") return null;
+    if (diasApartado === "personalizado") {
+      return fechaLimitePersonalizada ? new Date(`${fechaLimitePersonalizada}T23:59:59`) : null;
+    }
+    const d = new Date();
+    d.setDate(d.getDate() + Number(diasApartado || 15));
+    return d;
+  }, [tipoPago, diasApartado, fechaLimitePersonalizada]);
 
   // Procesar cobro del ticket
   const handleCobrarTicket = async (e) => {
@@ -200,7 +213,7 @@ function Ventas() {
     const montoCobrado = esContado ? totalCarrito : Number(anticipoAbono || 0);
 
     if (!esContado && montoCobrado <= 0) {
-      setError("Ingresa el monto del anticipo inicial para la venta en abonos.");
+      setError("Ingresa el monto del anticipo inicial para el apartado.");
       return;
     }
 
@@ -237,6 +250,8 @@ function Ventas() {
         totalAPagar: totalCarrito,
         estado: montoCobrado >= totalCarrito ? "pagado" : "pendiente",
         abonos: [primerAbono],
+        diasApartado: tipoPago === "Apartado" && diasApartado !== "personalizado" ? Number(diasApartado) : undefined,
+        fechaLimiteApartado: (tipoPago === "Apartado" || tipoPago === "Abonos") && fechaVencimientoApartado ? fechaVencimientoApartado.toISOString() : undefined,
       };
 
       const nuevaVenta = await crearVenta(ventaPayload);
@@ -728,62 +743,30 @@ function Ventas() {
                   </Campo>
                 </div>
 
-                {/* Modalidad + Medio de Pago en tabs integrados con Campo */}
+                {/* Modalidad + Medio de Pago con SelectNativo */}
                 <div className="grid grid-cols-2 gap-2">
                   <Campo label="Modalidad">
-                    <div className="flex rounded-sm border border-border overflow-hidden text-xs">
-                      <button
-                        type="button"
-                        onClick={() => setTipoPago("Contado")}
-                        className={`flex-1 py-1.5 font-medium transition-colors ${
-                          tipoPago === "Contado"
-                            ? "bg-accent text-bg"
-                            : "bg-bg text-muted hover:text-text"
-                        }`}
-                      >
-                        Contado
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setTipoPago("Abonos")}
-                        className={`flex-1 py-1.5 font-medium transition-colors border-l border-border ${
-                          tipoPago === "Abonos"
-                            ? "bg-accent text-bg"
-                            : "bg-bg text-muted hover:text-text"
-                        }`}
-                      >
-                        Apartado
-                      </button>
-                    </div>
+                    <SelectNativo
+                      value={tipoPago}
+                      onChange={setTipoPago}
+                      options={[
+                        { value: "Contado", label: "Contado" },
+                        { value: "Apartado", label: "Apartado" },
+                      ]}
+                      placeholder="Modalidad"
+                    />
                   </Campo>
 
                   <Campo label="Medio de pago">
-                    <div className="flex rounded-sm border border-border overflow-hidden text-xs">
-                      <button
-                        type="button"
-                        onClick={() => setMedioPago("Efectivo")}
-                        className={`flex-1 py-1.5 font-medium flex items-center justify-center gap-1 transition-colors ${
-                          medioPago === "Efectivo"
-                            ? "bg-accent text-bg"
-                            : "bg-bg text-muted hover:text-text"
-                        }`}
-                      >
-                        <DollarSign size={12} />
-                        Efectivo
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setMedioPago("Transferencia")}
-                        className={`flex-1 py-1.5 font-medium flex items-center justify-center gap-1 transition-colors border-l border-border ${
-                          medioPago === "Transferencia"
-                            ? "bg-accent text-bg"
-                            : "bg-bg text-muted hover:text-text"
-                        }`}
-                      >
-                        <CreditCard size={12} />
-                        Transf.
-                      </button>
-                    </div>
+                    <SelectNativo
+                      value={medioPago}
+                      onChange={setMedioPago}
+                      options={[
+                        { value: "Efectivo", label: "Efectivo" },
+                        { value: "Transferencia", label: "Transferencia" },
+                      ]}
+                      placeholder="Medio de pago"
+                    />
                   </Campo>
                 </div>
 
@@ -908,16 +891,17 @@ function Ventas() {
                   </div>
                 )}
 
-                {/* Apartado / Abonos: Anticipo + billetes rapidos */}
-                {tipoPago === "Abonos" && (
+                {/* Apartado / Abonos: Anticipo + Vigencia/Tiempo + Billetes rapidos */}
+                {(tipoPago === "Apartado" || tipoPago === "Abonos") && (
                   <div className="rounded-sm border border-border bg-bg overflow-hidden">
-                    <div className="p-2.5 space-y-2">
+                    <div className="p-2.5 space-y-2.5">
                       <div className="flex items-baseline justify-between">
                         <span className="text-[10px] text-muted uppercase tracking-widest">Total del apartado</span>
                         <span className="font-display text-xl font-bold text-accent">
                           ${totalCarrito.toLocaleString()}
                         </span>
                       </div>
+
                       <Campo label="Anticipo entregado" required>
                         <div className="relative">
                           <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted text-xs">$</span>
@@ -933,6 +917,54 @@ function Ventas() {
                           />
                         </div>
                       </Campo>
+
+                      {/* Vigencia / Tiempo del apartado */}
+                      <div className="pt-2 border-t border-border space-y-2">
+                        <Campo label="Vigencia del apartado" required>
+                          <SelectNativo
+                            value={diasApartado}
+                            onChange={setDiasApartado}
+                            options={[
+                              { value: "7", label: "7 dias (1 semana)" },
+                              { value: "15", label: "15 dias (quincena)" },
+                              { value: "30", label: "30 dias (1 mes)" },
+                              { value: "45", label: "45 dias" },
+                              { value: "personalizado", label: "Fecha personalizada..." },
+                            ]}
+                            placeholder="Selecciona vigencia"
+                          />
+                        </Campo>
+
+                        {diasApartado === "personalizado" && (
+                          <Campo label="Fecha limite exacta" required>
+                            <input
+                              type="date"
+                              value={fechaLimitePersonalizada}
+                              onChange={(e) => setFechaLimitePersonalizada(e.target.value)}
+                              className={`${inputClass(false)} py-1.5 text-xs`}
+                              required
+                            />
+                          </Campo>
+                        )}
+
+                        {fechaVencimientoApartado && (
+                          <div className="p-2 rounded-sm bg-accent/10 border border-accent/30 flex items-center justify-between text-xs">
+                            <span className="text-muted flex items-center gap-1.5">
+                              <Calendar size={13} className="text-accent" />
+                              Vence el:
+                            </span>
+                            <span className="font-semibold text-accent">
+                              {fechaVencimientoApartado.toLocaleDateString(undefined, {
+                                weekday: "short",
+                                year: "numeric",
+                                month: "short",
+                                day: "numeric",
+                              })}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+
                       {anticipoAbono && (
                         <div className="flex justify-between text-xs pt-1 border-t border-border">
                           <span className="text-muted">Saldo restante por liquidar:</span>
@@ -942,6 +974,7 @@ function Ventas() {
                         </div>
                       )}
                     </div>
+
                     <div className="px-2 pb-2 border-t border-border pt-2">
                       <p className="text-[9px] text-muted mb-1.5 uppercase tracking-wider">Anticipo rapido</p>
                       <div className="grid grid-cols-5 gap-1">
@@ -1146,6 +1179,34 @@ function Ventas() {
                                 <span>• {venta.telefonoCliente}</span>
                               )}
                             </div>
+                            {venta.fechaLimiteApartado && (
+                              <div className="mt-1">
+                                {(() => {
+                                  const hoy = new Date();
+                                  const fLim = new Date(venta.fechaLimiteApartado);
+                                  const dif = Math.ceil((fLim - hoy) / (1000 * 60 * 60 * 24));
+                                  if (esLiquidado) {
+                                    return (
+                                      <span className="text-[10px] text-muted">
+                                        Plazo: {fLim.toLocaleDateString()}
+                                      </span>
+                                    );
+                                  }
+                                  if (dif < 0) {
+                                    return (
+                                      <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-sm bg-negative/15 text-negative border border-negative/30 font-semibold">
+                                        Vencido ({Math.abs(dif)}d) • {fLim.toLocaleDateString()}
+                                      </span>
+                                    );
+                                  }
+                                  return (
+                                    <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-sm bg-accent/15 text-accent border border-accent/30 font-medium">
+                                      Vence en {dif === 0 ? "hoy" : `${dif} dias`} ({fLim.toLocaleDateString()})
+                                    </span>
+                                  );
+                                })()}
+                              </div>
+                            )}
                           </td>
 
                           {/* Total */}
@@ -1419,6 +1480,18 @@ function Ventas() {
                       Number(ticketModal.venta.totalAPagar || 0) -
                         Number(ticketModal.venta.montoPagado || 0)
                     ).toLocaleString()}
+                  </span>
+                </div>
+              )}
+              {ticketModal.venta.fechaLimiteApartado && (
+                <div className="flex justify-between text-accent font-medium pt-1 border-t border-border">
+                  <span>Limite para liquidar:</span>
+                  <span>
+                    {new Date(ticketModal.venta.fechaLimiteApartado).toLocaleDateString(undefined, {
+                      day: "numeric",
+                      month: "short",
+                      year: "numeric",
+                    })}
                   </span>
                 </div>
               )}
