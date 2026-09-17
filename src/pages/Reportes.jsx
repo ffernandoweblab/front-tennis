@@ -705,7 +705,7 @@ function Reportes() {
             </div>
           </div>
 
-          <div className="border border-border rounded-sm bg-surface p-5 min-h-[340px] flex flex-col justify-center">
+          <div className="border border-border rounded-sm bg-surface p-5 min-h-85 flex flex-col justify-center">
             {cargando && (
               <p className="text-center text-sm text-muted py-12">
                 Cargando datos de rendimiento...
@@ -721,7 +721,7 @@ function Reportes() {
 
             {!cargando && rendimientoPorLote.length > 0 && vistaLotes === "grafica" && (
               <div>
-                <div className="h-[280px] w-full">
+                <div className="h-70 w-full">
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart
                       data={rendimientoPorLote}
@@ -825,7 +825,7 @@ function Reportes() {
             <span className="text-xs text-muted">Distribucion de capital</span>
           </div>
 
-          <div className="border border-border rounded-sm bg-surface p-5 min-h-[340px] flex flex-col justify-between">
+          <div className="border border-border rounded-sm bg-surface p-5 min-h-85 flex flex-col justify-between">
             {cargando ? (
               <p className="text-center text-sm text-muted py-12">Calculando gastos...</p>
             ) : datosGastosPie.length === 0 ? (
@@ -834,7 +834,7 @@ function Reportes() {
               </div>
             ) : (
               <>
-                <div className="h-[200px] w-full relative flex items-center justify-center">
+                <div className="h-50 w-full relative flex items-center justify-center">
                   <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
                       <Pie
@@ -895,7 +895,7 @@ function Reportes() {
             <span className="text-xs text-muted">Top 5</span>
           </div>
 
-          <div className="border border-border rounded-sm bg-surface p-5 space-y-4 min-h-[300px] flex flex-col justify-center">
+          <div className="border border-border rounded-sm bg-surface p-5 space-y-4 min-h-75 flex flex-col justify-center">
             {cargando ? (
               <p className="text-center text-sm text-muted py-8">Cargando categorias...</p>
             ) : topCategorias.length === 0 ? (
