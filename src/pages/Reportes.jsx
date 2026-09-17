@@ -27,9 +27,8 @@ import DashboardLayout from "../layouts/DashboardLayout";
 import TarjetaStat from "../components/ui/TarjetaStat";
 import BarraProgreso from "../components/ui/BarraProgreso";
 import Button from "../components/ui/Button";
-import { getLotes } from "../services/lotService";
+import { getLotes, getLotSales } from "../services/lotService";
 import { getProductos } from "../services/productService";
-import { getVentas } from "../services/saleService";
 import { getCategorias } from "../services/categoryService";
 
 function calcularInversion(desglose) {
@@ -84,28 +83,52 @@ function CustomPieTooltip({ active, payload }) {
 function Reportes() {
   const [lotes, setLotes] = useState([]);
   const [productos, setProductos] = useState([]);
-  const [ventas, setVentas] = useState([]);
   const [categorias, setCategorias] = useState([]);
+  const [ventasLotes, setVentasLotes] = useState({});
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState(null);
-  const [filtroLoteId, setFiltroLoteId] = useState("Todos");
+  const [filtroLoteId, setFiltroLoteId] = useState("");
   const [vistaLotes, setVistaLotes] = useState("grafica");
 
   const cargarDatos = useCallback(async () => {
     try {
       setCargando(true);
       setError(null);
-      const [dataLotes, dataProductos, dataVentas, dataCategorias] = await Promise.all([
+      const [dataLotes, dataProductos, dataCategorias] = await Promise.all([
         getLotes(),
         getProductos(),
-        getVentas(),
         getCategorias(),
       ]);
 
-      setLotes(Array.isArray(dataLotes) ? dataLotes : []);
+      const listaLotes = Array.isArray(dataLotes) ? dataLotes : [];
+      setLotes(listaLotes);
       setProductos(Array.isArray(dataProductos) ? dataProductos : []);
-      setVentas(Array.isArray(dataVentas) ? dataVentas : []);
       setCategorias(Array.isArray(dataCategorias) ? dataCategorias : []);
+
+      if (listaLotes.length > 0) {
+        setFiltroLoteId((prev) => {
+          if (!prev || prev === "Todos") {
+            return listaLotes[0]._id;
+          }
+          const existe = listaLotes.some((l) => l._id === prev);
+          return existe ? prev : listaLotes[0]._id;
+        });
+
+        const resultadosVentas = await Promise.allSettled(
+          listaLotes.map((l) => getLotSales(l._id))
+        );
+        const mapa = {};
+        listaLotes.forEach((l, index) => {
+          const res = resultadosVentas[index];
+          if (res && res.status === "fulfilled" && res.value) {
+            mapa[l._id] = res.value;
+          }
+        });
+        setVentasLotes(mapa);
+      } else {
+        setFiltroLoteId("Todos");
+        setVentasLotes({});
+      }
     } catch {
       setError("No se pudieron cargar los datos de los reportes.");
     } finally {
@@ -122,6 +145,30 @@ function Reportes() {
     return lotes.filter((l) => l._id === filtroLoteId);
   }, [lotes, filtroLoteId]);
 
+  const loteActual = useMemo(() => {
+    if (filtroLoteId === "Todos" || !filtroLoteId) return null;
+    return lotes.find((l) => l._id === filtroLoteId) || null;
+  }, [lotes, filtroLoteId]);
+
+  const indiceLoteActual = useMemo(() => {
+    if (filtroLoteId === "Todos" || !filtroLoteId) return -1;
+    return lotes.findIndex((l) => l._id === filtroLoteId);
+  }, [lotes, filtroLoteId]);
+
+  const irLoteAnterior = useCallback(() => {
+    if (indiceLoteActual > 0) {
+      setFiltroLoteId(lotes[indiceLoteActual - 1]._id);
+    }
+  }, [indiceLoteActual, lotes]);
+
+  const irLoteSiguiente = useCallback(() => {
+    if (indiceLoteActual >= 0 && indiceLoteActual < lotes.length - 1) {
+      setFiltroLoteId(lotes[indiceLoteActual + 1]._id);
+    } else if (indiceLoteActual === -1 && lotes.length > 0) {
+      setFiltroLoteId(lotes[0]._id);
+    }
+  }, [indiceLoteActual, lotes]);
+
   const productosFiltrados = useMemo(() => {
     if (filtroLoteId === "Todos") return productos;
     return productos.filter(
@@ -134,6 +181,10 @@ function Reportes() {
     let viaticosTotal = 0;
     let gasolinaTotal = 0;
     let otrosTotal = 0;
+    let ventasTotal = 0;
+    let totalRecaudado = 0;
+    let totalPendiente = 0;
+    let paresVendidos = 0;
 
     for (const lote of lotesFiltrados) {
       const d = lote.desgloseInversion || {};
@@ -141,29 +192,29 @@ function Reportes() {
       viaticosTotal += Number(d.viaticos || 0);
       gasolinaTotal += Number(d.gasolina || 0);
       otrosTotal += Number(d.otros || 0);
+
+      const resumen = ventasLotes[lote._id]?.resumen;
+      if (resumen) {
+        ventasTotal += Number(resumen.totalVendido || 0);
+        totalRecaudado += Number(resumen.totalRecaudado || 0);
+        totalPendiente += Number(resumen.totalPendiente || 0);
+        paresVendidos += Number(resumen.unidadesVendidas || 0);
+      } else {
+        const prods = productos.filter(
+          (p) => p.lote === lote._id || p.lote?._id === lote._id
+        );
+        for (const prod of prods) {
+          if (!prod.activo || Number(prod.stock || 0) <= 0) {
+            paresVendidos += 1;
+            ventasTotal += Number(prod.precioMercado || 0);
+            totalRecaudado += Number(prod.precioMercado || 0);
+          }
+        }
+      }
     }
 
     const inversionTotal =
       mercanciaTotal + viaticosTotal + gasolinaTotal + otrosTotal;
-
-    const ventasDirectas = ventas.reduce(
-      (acc, v) => acc + Number(v.montoPagado || v.totalAPagar || 0),
-      0
-    );
-
-    let ventasProductosVendidos = 0;
-    let paresVendidos = 0;
-
-    for (const prod of productosFiltrados) {
-      const esVendido = !prod.activo || Number(prod.stock || 0) <= 0;
-      if (esVendido) {
-        paresVendidos++;
-        ventasProductosVendidos += Number(prod.precioMercado || 0);
-      }
-    }
-
-    const ventasTotal =
-      ventasDirectas > 0 ? ventasDirectas : ventasProductosVendidos;
 
     const gananciaTotal = ventasTotal - inversionTotal;
     const roi = inversionTotal > 0
@@ -173,6 +224,8 @@ function Reportes() {
     return {
       inversionTotal,
       ventasTotal,
+      totalRecaudado,
+      totalPendiente,
       gananciaTotal,
       roi,
       paresVendidos,
@@ -183,29 +236,38 @@ function Reportes() {
         otros: otrosTotal,
       },
     };
-  }, [lotesFiltrados, productosFiltrados, ventas]);
+  }, [lotesFiltrados, productos, ventasLotes]);
 
   const rendimientoPorLote = useMemo(() => {
-    return lotes.map((lote) => {
+    return lotesFiltrados.map((lote) => {
       const prods = productos.filter(
         (p) => p.lote === lote._id || p.lote?._id === lote._id
       );
 
       const inversion = calcularInversion(lote.desgloseInversion);
+      const resumen = ventasLotes[lote._id]?.resumen;
+
       let ingresosLote = 0;
       let vendidosLote = 0;
+      let porcentajeRecuperado = 0;
 
-      for (const p of prods) {
-        if (!p.activo || Number(p.stock || 0) <= 0) {
-          vendidosLote++;
-          ingresosLote += Number(p.precioMercado || 0);
+      if (resumen) {
+        ingresosLote = Number(resumen.totalVendido || 0);
+        vendidosLote = Number(resumen.unidadesVendidas || 0);
+        porcentajeRecuperado = Number(resumen.porcentajeRecuperado || 0);
+      } else {
+        for (const p of prods) {
+          if (!p.activo || Number(p.stock || 0) <= 0) {
+            vendidosLote++;
+            ingresosLote += Number(p.precioMercado || 0);
+          }
         }
+        porcentajeRecuperado = inversion > 0
+          ? Math.min(Math.round((ingresosLote / inversion) * 100), 100)
+          : 0;
       }
 
       const gananciaLote = ingresosLote - inversion;
-      const porcentajeRecuperado = inversion > 0
-        ? Math.min(Math.round((ingresosLote / inversion) * 100), 100)
-        : 0;
 
       return {
         _id: lote._id,
@@ -218,13 +280,13 @@ function Reportes() {
         porcentajeRecuperado,
       };
     });
-  }, [lotes, productos]);
+  }, [lotesFiltrados, productos, ventasLotes]);
 
   // Top Modelos para la tabla detallada
   const topModelos = useMemo(() => {
     const mapa = new Map();
 
-    for (const prod of productos) {
+    for (const prod of productosFiltrados) {
       const nombre = prod.nombre || "Sin nombre";
       const actual = mapa.get(nombre) || {
         nombre,
@@ -240,7 +302,18 @@ function Reportes() {
         actual.imagen = prod.imagenes[0];
       }
 
-      if (!prod.activo || Number(prod.stock || 0) <= 0) {
+      const loteId = prod.lote?._id || prod.lote;
+      const desglose = ventasLotes[loteId]?.desgloseProductos;
+      const itemDesglose = Array.isArray(desglose)
+        ? desglose.find((d) => d.id === prod._id || d.nombre === prod.nombre)
+        : null;
+
+      if (itemDesglose) {
+        actual.vendidos += Number(itemDesglose.unidadesVendidas || 0);
+        actual.ingreso += Number(itemDesglose.totalVendido || 0);
+        actual.enStock += Number(itemDesglose.stockDisponible || 0);
+        actual.costoTotal += Number(prod.costo || 0) * Number(itemDesglose.unidadesVendidas || 0);
+      } else if (!prod.activo || Number(prod.stock || 0) <= 0) {
         actual.vendidos += 1;
         actual.ingreso += Number(prod.precioMercado || 0);
         actual.costoTotal += Number(prod.costo || 0);
@@ -254,13 +327,12 @@ function Reportes() {
     const lista = Array.from(mapa.values());
     lista.sort((a, b) => b.ingreso - a.ingreso || b.vendidos - a.vendidos);
     return lista.slice(0, 5);
-  }, [productos]);
+  }, [productosFiltrados, ventasLotes]);
 
   // Top Categorías por ingresos (incluyendo categorías sin productos)
   const topCategorias = useMemo(() => {
     const mapa = new Map();
 
-    // 1. Inicializar con todas las categorías existentes de la base de datos
     for (const cat of categorias) {
       const nombre = typeof cat === "string" ? cat : (cat.nombre || "Sin nombre");
       const id = String(cat._id || nombre);
@@ -274,10 +346,25 @@ function Reportes() {
       });
     }
 
-    // 2. Acumular información de los productos
     for (const prod of productosFiltrados) {
-      const esVendido = !prod.activo || Number(prod.stock || 0) <= 0;
-      const ingresoProd = Number(prod.precioMercado || 0);
+      const loteId = prod.lote?._id || prod.lote;
+      const desglose = ventasLotes[loteId]?.desgloseProductos;
+      const itemDesglose = Array.isArray(desglose)
+        ? desglose.find((d) => d.id === prod._id || d.nombre === prod.nombre)
+        : null;
+
+      let unidadesVendidasProd = 0;
+      let ingresoProd = 0;
+      let stockProd = Number(prod.stock || 0);
+
+      if (itemDesglose) {
+        unidadesVendidasProd = Number(itemDesglose.unidadesVendidas || 0);
+        ingresoProd = Number(itemDesglose.totalVendido || 0);
+        stockProd = Number(itemDesglose.stockDisponible || 0);
+      } else if (!prod.activo || Number(prod.stock || 0) <= 0) {
+        unidadesVendidasProd = 1;
+        ingresoProd = Number(prod.precioMercado || 0);
+      }
 
       const cats = Array.isArray(prod.categorias) && prod.categorias.length > 0
         ? prod.categorias
@@ -301,12 +388,9 @@ function Reportes() {
         }
 
         actual.totalProductos += 1;
-        if (esVendido) {
-          actual.vendidos += 1;
-          actual.ingreso += ingresoProd;
-        } else {
-          actual.enStock += Number(prod.stock || 0);
-        }
+        actual.vendidos += unidadesVendidasProd;
+        actual.ingreso += ingresoProd;
+        actual.enStock += stockProd;
       }
     }
 
@@ -319,7 +403,7 @@ function Reportes() {
         a.nombre.localeCompare(b.nombre)
     );
     return lista.slice(0, 5);
-  }, [categorias, productosFiltrados]);
+  }, [categorias, productosFiltrados, ventasLotes]);
 
   const maxIngresoCategoria = useMemo(() => {
     if (topCategorias.length === 0) return 1;
@@ -367,6 +451,8 @@ function Reportes() {
       ["RESUMEN GENERAL"],
       ["Inversion Total", `$${metricas.inversionTotal}`],
       ["Ventas Totales", `$${metricas.ventasTotal}`],
+      ["Total Cobrado", `$${metricas.totalRecaudado}`],
+      ["Total Pendiente", `$${metricas.totalPendiente}`],
       ["Ganancia Neta", `$${metricas.gananciaTotal}`],
       ["ROI (%)", `${metricas.roi}%`],
       ["Pares Vendidos", metricas.paresVendidos],
@@ -417,23 +503,7 @@ function Reportes() {
           <h1 className="font-display text-3xl text-text">Reportes</h1>
           <p className="text-muted mt-1">Rendimiento financiero general y balance visual por lote.</p>
         </div>
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-muted">Filtrar:</span>
-            <select
-              value={filtroLoteId}
-              onChange={(e) => setFiltroLoteId(e.target.value)}
-              className="bg-surface border border-border rounded-sm px-3 py-2 text-xs text-text focus:outline-none focus:border-accent"
-            >
-              <option value="Todos">Todos los lotes</option>
-              {lotes.map((l) => (
-                <option key={l._id} value={l._id}>
-                  Lote {l.numLot ?? "--"}
-                </option>
-              ))}
-            </select>
-          </div>
-
+        <div className="flex items-center gap-3">
           <Button
             icono={RefreshCw}
             onClick={cargarDatos}
@@ -465,25 +535,138 @@ function Reportes() {
         </div>
       )}
 
+      {/* Selector y Navegacion de Lotes en la parte superior */}
+      <div className="mb-8 border border-border rounded-sm bg-surface p-4 space-y-3">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-border pb-3">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-sm bg-accent/10 border border-accent/30 flex items-center justify-center text-accent">
+              <Layers size={16} />
+            </div>
+            <div>
+              <p className="text-xs text-muted">Lote en consulta</p>
+              <div className="flex items-center gap-2">
+                <span className="font-display text-base text-text font-medium">
+                  {loteActual ? (loteActual.numLot ?? "Lote seleccionado") : "Todos los lotes (Consolidado)"}
+                </span>
+                {loteActual && (
+                  <span
+                    className={`text-[10px] px-2 py-0.5 rounded-sm border font-medium ${
+                      loteActual.estado === "activo"
+                        ? "text-positive border-positive/40 bg-positive/5"
+                        : "text-muted border-border bg-bg"
+                    }`}
+                  >
+                    {loteActual.estado || "activo"}
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Navegacion rapida Anterior / Siguiente */}
+          {lotes.length > 1 && (
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={irLoteAnterior}
+                disabled={indiceLoteActual <= 0}
+                className="px-3 py-1.5 text-xs border border-border rounded-sm text-text bg-bg hover:bg-surface disabled:opacity-30 disabled:cursor-not-allowed transition-all font-medium"
+                title="Lote anterior"
+              >
+                &larr; Anterior
+              </button>
+              <span className="text-xs text-muted tabular-nums px-1">
+                {indiceLoteActual >= 0 ? `${indiceLoteActual + 1} de ${lotes.length}` : `Todos (${lotes.length})`}
+              </span>
+              <button
+                type="button"
+                onClick={irLoteSiguiente}
+                disabled={indiceLoteActual >= lotes.length - 1}
+                className="px-3 py-1.5 text-xs border border-border rounded-sm text-text bg-bg hover:bg-surface disabled:opacity-30 disabled:cursor-not-allowed transition-all font-medium"
+                title="Siguiente lote"
+              >
+                Siguiente &rarr;
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* Pestanas para cambiar entre lotes */}
+        <div className="flex items-center gap-2 overflow-x-auto pb-1">
+          {lotes.map((lote, idx) => {
+            const seleccionado = filtroLoteId === lote._id;
+            return (
+              <button
+                key={lote._id}
+                type="button"
+                onClick={() => setFiltroLoteId(lote._id)}
+                className={`px-3.5 py-1.5 rounded-sm text-xs font-medium transition-all shrink-0 border flex items-center gap-2 ${
+                  seleccionado
+                    ? "bg-accent text-bg border-accent shadow-sm"
+                    : "bg-bg text-muted border-border hover:text-text hover:border-text/40"
+                }`}
+              >
+                <span>{lote.numLot || `Lote ${idx + 1}`}</span>
+                <span
+                  className={`text-[10px] px-1.5 py-0.5 rounded-xs border ${
+                    seleccionado
+                      ? "border-bg/30 text-bg"
+                      : lote.estado === "activo"
+                      ? "border-positive/40 text-positive"
+                      : "border-border text-muted"
+                  }`}
+                >
+                  {lote.estado || "activo"}
+                </span>
+              </button>
+            );
+          })}
+
+          <button
+            type="button"
+            onClick={() => setFiltroLoteId("Todos")}
+            className={`px-3.5 py-1.5 rounded-sm text-xs font-medium transition-all shrink-0 border ${
+              filtroLoteId === "Todos"
+                ? "bg-accent text-bg border-accent shadow-sm"
+                : "bg-bg text-muted border-border hover:text-text hover:border-text/40"
+            }`}
+          >
+            Todos los lotes (Consolidado)
+          </button>
+        </div>
+      </div>
+
       {/* Tarjetas de Estadísticas Principales */}
       <section className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
         <TarjetaStat
-          titulo="Inversion total"
+          titulo={loteActual ? `Inversion (${loteActual.numLot ?? "Lote"})` : "Inversion total"}
           valor={`$${metricas.inversionTotal.toLocaleString()}`}
+          subtitulo={
+            loteActual
+              ? `Estado: ${loteActual.estado || "activo"}`
+              : `${lotes.length} ${lotes.length === 1 ? "lote registrado" : "lotes registrados"}`
+          }
         />
         <TarjetaStat
-          titulo="Ventas registradas"
+          titulo={loteActual ? `Ventas (${loteActual.numLot ?? "Lote"})` : "Ventas registradas"}
           valor={`$${metricas.ventasTotal.toLocaleString()}`}
+          subtitulo={
+            metricas.totalPendiente > 0
+              ? `Cobrado: $${metricas.totalRecaudado.toLocaleString()} (Pendiente: $${metricas.totalPendiente.toLocaleString()})`
+              : `${metricas.paresVendidos} ${metricas.paresVendidos === 1 ? "par vendido" : "pares vendidos"}`
+          }
         />
         <TarjetaStat
-          titulo="Ganancia neta"
+          titulo={loteActual ? `Ganancia (${loteActual.numLot ?? "Lote"})` : "Ganancia neta"}
           valor={`$${metricas.gananciaTotal.toLocaleString()}`}
           className={metricas.gananciaTotal >= 0 ? "text-positive" : "text-negative"}
+          subtitulo={metricas.gananciaTotal >= 0 ? "Ganancia obtenida" : "Falta por recuperar"}
         />
         <TarjetaStat
-          titulo="Retorno de inversion"
+          titulo={loteActual ? "Recuperacion" : "Retorno de inversion"}
           valor={`${metricas.roi}%`}
           className={Number(metricas.roi) >= 0 ? "text-positive" : "text-negative"}
+          subtitulo={loteActual ? "Avance de recuperacion" : "Sobre el capital invertido"}
         />
       </section>
 
@@ -494,28 +677,28 @@ function Reportes() {
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <BarChart3 size={20} className="text-accent" />
-              <h2 className="font-display text-xl text-text">Inversion vs Ventas por Lote</h2>
+              <h2 className="font-display text-xl text-text">
+                {loteActual ? `Rendimiento de ${loteActual.numLot ?? "Lote"}` : "Inversion vs Ventas por Lote"}
+              </h2>
             </div>
             <div className="flex items-center gap-1 bg-surface border border-border p-1 rounded-sm text-xs">
               <button
                 type="button"
                 onClick={() => setVistaLotes("grafica")}
-                className={`px-2.5 py-1 rounded-sm transition-colors ${
-                  vistaLotes === "grafica"
+                className={`px-2.5 py-1 rounded-sm transition-colors ${vistaLotes === "grafica"
                     ? "bg-accent text-bg font-medium"
                     : "text-muted hover:text-text"
-                }`}
+                  }`}
               >
                 Grafica
               </button>
               <button
                 type="button"
                 onClick={() => setVistaLotes("lista")}
-                className={`px-2.5 py-1 rounded-sm transition-colors ${
-                  vistaLotes === "lista"
+                className={`px-2.5 py-1 rounded-sm transition-colors ${vistaLotes === "lista"
                     ? "bg-accent text-bg font-medium"
                     : "text-muted hover:text-text"
-                }`}
+                  }`}
               >
                 Barras de lista
               </button>
@@ -720,41 +903,41 @@ function Reportes() {
             ) : (
               topCategorias.map((item, index) => {
                 const porcentaje = Math.round((item.ingreso / maxIngresoCategoria) * 100);
-               return (
-  <div key={item.nombre} className="space-y-1.5">
-    <div className="flex items-center justify-between gap-2 sm:gap-3">
-      <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
-        <span className="text-xs font-bold text-muted w-4 shrink-0">
-          #{index + 1}
-        </span>
-        <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-sm border border-border flex items-center justify-center text-accent shrink-0 bg-background/50">
-          <Tag size={14} className="sm:hidden" />
-          <Tag size={16} className="hidden sm:block" />
-        </div>
-        <div className="min-w-0 flex-1">
-          <p className="text-sm font-medium text-text truncate" title={item.nombre}>
-            {item.nombre}
-          </p>
-          <p className="text-[11px] sm:text-xs text-muted truncate">
-            {item.vendidos} {item.vendidos === 1 ? "par vendido" : "pares vendidos"} • {item.totalProductos} {item.totalProductos === 1 ? "modelo" : "modelos"}
-          </p>
-        </div>
-      </div>
-      <div className="text-right shrink-0">
-        <span className="text-xs sm:text-sm font-semibold text-accent whitespace-nowrap">
-          ${item.ingreso.toLocaleString()}
-        </span>
-      </div>
-    </div>
-    {/* Barra visual de recaudación */}
-    <div className="w-full bg-background/60 h-1.5 rounded-full overflow-hidden ml-6 sm:ml-7">
-      <div
-        className="bg-accent h-full rounded-full transition-all duration-500"
-        style={{ width: `${Math.max(porcentaje, 4)}%` }}
-      />
-    </div>
-  </div>
-);
+                return (
+                  <div key={item.nombre} className="space-y-1.5">
+                    <div className="flex items-center justify-between gap-2 sm:gap-3">
+                      <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
+                        <span className="text-xs font-bold text-muted w-4 shrink-0">
+                          #{index + 1}
+                        </span>
+                        <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-sm border border-border flex items-center justify-center text-accent shrink-0 bg-background/50">
+                          <Tag size={14} className="sm:hidden" />
+                          <Tag size={16} className="hidden sm:block" />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-medium text-text truncate" title={item.nombre}>
+                            {item.nombre}
+                          </p>
+                          <p className="text-[11px] sm:text-xs text-muted truncate">
+                            {item.vendidos} {item.vendidos === 1 ? "par vendido" : "pares vendidos"} • {item.totalProductos} {item.totalProductos === 1 ? "modelo" : "modelos"}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="text-right shrink-0">
+                        <span className="text-xs sm:text-sm font-semibold text-accent whitespace-nowrap">
+                          ${item.ingreso.toLocaleString()}
+                        </span>
+                      </div>
+                    </div>
+                    {/* Barra visual de recaudación */}
+                    <div className="w-full bg-background/60 h-1.5 rounded-full overflow-hidden ml-6 sm:ml-7">
+                      <div
+                        className="bg-accent h-full rounded-full transition-all duration-500"
+                        style={{ width: `${Math.max(porcentaje, 4)}%` }}
+                      />
+                    </div>
+                  </div>
+                );
               })
             )}
           </div>

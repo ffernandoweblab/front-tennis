@@ -28,3 +28,8 @@ export const eliminarLote = async (id) => {
   const response = await api.put(`/lot/${id}/delete`);
   return response.data;
 };
+
+export const getLotSales = async (id) => {
+  const response = await api.get(`/lot/${id}/sales`);
+  return response.data;
+};
